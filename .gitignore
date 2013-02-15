@@ -1,0 +1,14 @@
+Makefile
+build/*
+*.eep
+*.elf
+*.lss
+*.lst
+*.map
+*.sym
+*.xcodeproj
+*.hex
+*.o
+.dep
+run*
+SPI_SLAVE
