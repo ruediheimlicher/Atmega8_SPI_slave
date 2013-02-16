@@ -459,7 +459,7 @@ int main (void)
 		loopCount0 ++;
 		//_delay_ms(2);
       
-		if (loopCount0 >=0x0FFF)
+		if (loopCount0 >=0x00FF)
 		{
 						
 			
