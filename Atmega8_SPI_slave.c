@@ -95,10 +95,16 @@ volatile uint16_t					Manuellcounter=0; // Countr fuer Timeout
 	uint16_t Tastenprellen=0x01F;
 
 volatile uint8_t data;
-volatile uint8_t spicount=0;;
+volatile uint8_t lastdata;
 
-volatile char text[] = {'A','B','C','D','E','F','G','H'};
+volatile uint8_t spicount=0;
+size_t inpos=0;
+volatile uint8_t outpos=0;
+volatile uint8_t textpos=0;
 
+
+//volatile char text[] = {'A','B','C','D','E','F','G','H'};
+volatile char* text = "* Slave *";
 
 //#define MAXSENSORS 5
 static uint8_t gSensorIDs[MAXSENSORS][OW_ROMCODE_SIZE];
@@ -404,8 +410,8 @@ ISR (SPI_STC_vect)
 {
    data = SPDR;
    //SPDR = data & 0x07;
-   SPDR = text[data & 0x07];
-   
+   SPDR = text[textpos & 0x07];
+   //SPDR = 'B';
    spicount++;
    //PORTD = data;
    
@@ -431,7 +437,7 @@ int main (void)
    delay_ms(1000);
 	lcd_cls();
    lcd_gotoxy(0,0);
-	lcd_puts("READY\0");
+	lcd_puts("SLAVE\0");
 	
    // http://www.nerdkits.com/forum/thread/2317/
    //DDRC|=(1<<PC5);// pin c5 as output
@@ -447,7 +453,7 @@ int main (void)
 	// DS1820 init-stuff end
 #pragma mark while
    sei();
-   
+   lcd_gotoxy(0,1);
 	while (1) 
 	{
 		loopCount0 ++;
@@ -473,19 +479,44 @@ int main (void)
          PORTD = data;
 */
          
-         lcd_gotoxy(18,0);
-         lcd_puthex(data);
+         //lcd_gotoxy(18,0);
+         if (!(data==lastdata))
+         {
+            lastdata = data;
+            lcd_gotoxy(inpos,0);
+            lcd_putc(lastdata);
+            inpos ++;
+            if (inpos >= 19)
+            {
+               inpos = 0;
+            }
+            
+            
+            lcd_gotoxy(outpos,1);
+            lcd_putc(text[textpos & 0x07]);
+            textpos++;
+            outpos ++;
+            if (outpos >= 19)
+            {
+               outpos = 0;
+            }
+           
+            
+         }
+
          
-         lcd_gotoxy(12,0);
-         lcd_putc(text[data & 0x07]);
+         
+        // lcd_gotoxy(12,0);
+        // lcd_putc(text[spicount & 0x07]);
          //lcd_puthex(SPDR);
 			//SPDR = 2;
-			if ((loopCount1 >0x00FF) )//&& (!(Programmstatus & (1<<MANUELL))))
+			if ((loopCount1 >0x000F) )//&& (!(Programmstatus & (1<<MANUELL))))
 			{
             //LOOPLED_PORT ^= (1<<LOOPLED_PIN);
 				
             //LOOPLED_PORT ^= (1<<LOOPLED_PIN);
-					
+				
+            
 				loopCount1=0;
             
             //char incoming = SPI_get_put_char('A');
