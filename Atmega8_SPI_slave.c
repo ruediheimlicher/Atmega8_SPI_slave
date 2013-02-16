@@ -313,28 +313,19 @@ void SPI_Init(void)
    // Enable SPI, Master, set clock rate fck/16 
    SPCR = (1<<SPE)|(1<<MSTR)|(1<<SPR0);
    */
-  
+   
     // Slave init
+   // http://www.nerdkits.com/forum/thread/2317/
    unsigned char status;
-   DDRB &= ~((1<<2)|(1<<3)|(1<<5));
-   DDRB |= (1<<4);
-   PORTB |= (1<<2)|(1<<3)|(1<<5);
-   SPCR &= ~(1<<MSTR);
-   
+      
+   SPI_DDR|=(1<<SPI_MISO);
+   SPI_DDR &= ~(1<<SPI_SCK);
+   SPI_DDR &= ~(1<<SPI_MOSI);
+   SPI_DDR &= ~(1<<SPI_SS);
+   SPCR |= (1<<SPE) | (1<<SPIE);// enable SPI, enable spi interputs
    SPCR |= (1<<SPR0)|(1<<SPR1);
-   SPCR |= (1<<SPE);
-   SPCR &= ~(1<<SPIE);
+   SPCR &= ~(1<<MSTR);
    status = SPSR;
-   /*
-   SPCR &= ~(1<<MSTR);
-   SPCR &= ~(1<<2);
-    // Set MISO output, all others input
-    SPI_DDR = (1<<SPI_MISO);
-   
-   SPCR |= (1<<SPR0)|(1<<SPR1);
-    // Enable SPI 
-    SPCR = (1<<SPE);
-  */
    
 }
 
@@ -377,14 +368,9 @@ ISR (SPI_STC_vect)
 
 int main (void)
 {
-	/* INITIALIZE */
-//	LCD_DDR |=(1<<LCD_RSDS_PIN);
-//	LCD_DDR |=(1<<LCD_ENABLE_PIN);
-//	LCD_DDR |=(1<<LCD_CLOCK_PIN);
-	
 	slaveinit();
 	
-   //SPI_Init();
+   SPI_Init();
    
    
    
@@ -396,7 +382,8 @@ int main (void)
    lcd_gotoxy(0,0);
 	lcd_puts("SLAVE\0");
 	
-   // http://www.nerdkits.com/forum/thread/2317/
+   
+   /*
    //DDRC|=(1<<PC5);// pin c5 as output
    DDRB|=(1<<PB4);
    DDRB &= ~(1<<PB5);
@@ -405,6 +392,7 @@ int main (void)
    SPCR |= (1<<SPE) | (1<<SPIE);// enable SPI, enable spi interputs
    SPCR |= (1<<SPR0)|(1<<SPR1);
    //PORTB |= (1<<PB4);
+    */
    
 	// DS1820 init-stuff begin
 	// DS1820 init-stuff end
