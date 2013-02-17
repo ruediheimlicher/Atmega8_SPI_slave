@@ -56,12 +56,20 @@ size_t inpos=0;
 volatile uint8_t outpos=0;
 volatile uint8_t textpos=0;
 
+volatile uint8_t incounter=0;
+
 volatile uint8_t data_array[8];
 volatile uint8_t arraypos=0;
 
+volatile uint8_t inbuffer[16];
+volatile uint8_t outbuffer[16];
+volatile uint8_t spistatus=0;
+
+volatile uint8_t char0='x';
 
 //volatile char text[] = {'A','B','C','D','E','F','G','H'};
-volatile char* text = "* Slave *";
+//volatile char* text = "+Slave_0*";
+volatile char* text = "0ABCD*";
 
 //#define MAXSENSORS 5
 static uint8_t gSensorIDs[MAXSENSORS][OW_ROMCODE_SIZE];
@@ -250,9 +258,11 @@ void slaveinit(void)
 //	MANUELL_PORT &= ~(1<<MANUELLPIN);
  	//DDRD |= (1<<CONTROL_A);	//Pin 6 von PORT D als Ausgang fuer Servo-Enable
 	DDRD |= (1<<7);	//Pin 7 von PORT D als Ausgang fuer Servo-Impuls
+	DDRD |= (1<<6);	//Pin 6 von PORT D als Ausgang fuer Servo-Impuls
 	LOOPLED_DDR |= (1<<LOOPLED_PIN);
 	//PORTD &= ~(1<<CONTROL_B);
 	PORTD |= (1<<7);
+   PORTD |= (1<<6);
 
 	DDRB &= ~(1<<PORTB0);	//Bit 2 von PORT B als Eingang fuer Taster
 	PORTB |= (1<<PORTB0);	//HI
@@ -260,8 +270,8 @@ void slaveinit(void)
 //	DDRB |= (1<<PORTB2);	//Bit 2 von PORT B als Ausgang fuer PWM
 //	PORTB &= ~(1<<PORTB2);	//LO
 
-	DDRB |= (1<<PORTB1);	//Bit 1 von PORT B als Ausgang fuer PWM
-	PORTB &= ~(1<<PORTB1);	//LO
+	//DDRB |= (1<<PORTB1);	//Bit 1 von PORT B als Ausgang fuer PWM
+	//PORTB &= ~(1<<PORTB1);	//LO
 	
 
 	//LCD
@@ -314,14 +324,21 @@ void SPI_Init(void)
    SPCR = (1<<SPE)|(1<<MSTR)|(1<<SPR0);
    */
    
+   // INT0 init
+   INT0_DDR &= ~(1<<INT0_PIN);
+   INT0_PORT |= (1<<INT0_PIN);
+   
     // Slave init
    // http://www.nerdkits.com/forum/thread/2317/
    unsigned char status;
       
-   SPI_DDR|=(1<<SPI_MISO);
+   SPI_DDR |= (1<<SPI_MISO);
    SPI_DDR &= ~(1<<SPI_SCK);
    SPI_DDR &= ~(1<<SPI_MOSI);
    SPI_DDR &= ~(1<<SPI_SS);
+
+   SPI_DDR &= ~(1<<SPI_CS); // Chip Select von Master
+   
    SPCR |= (1<<SPE) | (1<<SPIE);// enable SPI, enable spi interputs
    SPCR |= (1<<SPR0)|(1<<SPR1);
    SPCR &= ~(1<<MSTR);
@@ -329,39 +346,76 @@ void SPI_Init(void)
    
 }
 
-
-void _putch_u (char ch)
+ISR( INT0_vect )
 {
    
-	while(PINB & (1<<PORT7)); //handshaking
+   textpos=0;
+   text[0]= 0x30+(spicount & 0x07);
+   SPDR = text[0]; // erstes Byte setzen
+   outbuffer[textpos] = text[textpos];
    
-#ifdef USR
-	while(!(USR & (1<<UDRE))); //transmit buffer is ready to receive data
-	
-	UDR = ch;    // send character
-	while(!(USR & (1<<TXC))); //wait for char to be send
-   
-	USR &= ~(1<<TXC || 1<<UDRE);
-#else //2 UART MCU
-	while(!(UCSRA & (1<<UDRE))); //transmit buffer is ready to receivce data
-	
-	UDR = ch;    // send character
-	while(!(UCSRA & (1<<TXC))); //wait for char to be send
-   
-	UCSRA &= ~(1<<TXC || 1<<UDRE);
-   
-#endif
-	
 }
 
 ISR (SPI_STC_vect)
 {
+   if (SPI_PIN & (1<<SPI_CS)) // SS Hi, kein SPI
+   {
+      
+   }
+   else
+   {
+     
+      if (spistatus & (1<<SPI_CS)) // schon gesetzt, nichts tun
+      {
+         PORTD &= ~(1<<7);
+ 
+      }
+      else // neues Paket
+      {
+         
+         //PORTD &= ~(1<<6);
+         textpos=0;
+         //text[0]= 0x30+(spicount & 0x07);
+         char0 = text[0];
+
+         spistatus |= (1<<SPI_CS);
+         spicount++; // fortlaufender Counter der Pakete
+         //PORTD |= (1<<6);
+      }
+   }
+   //char next = text[textpos];
+   
+
    data = SPDR;
-   //SPDR = data & 0x07;
-   SPDR = text[textpos & 0x07];
-   //SPDR = 'B';
-   spicount++;
-   //PORTD = data;
+   if (textpos < strlen(text))
+   {
+      inbuffer[textpos] = data;
+      textpos++;
+      SPDR = text[textpos];
+      PORTD |= (1<<7);
+      
+      outbuffer[textpos] = text[textpos];
+      
+   }
+   else
+   {
+      // nicht erreicht ??
+      PORTD &= ~(1<<6);
+      SPDR = '$';
+      
+      spistatus &= ~(1<<SPI_CS); // Beenden
+      PORTD |= (1<<6);
+      
+   }
+   
+   if (textpos >= strlen(text))
+   {
+      
+      SPDR = '$';
+      spistatus &= ~(1<<SPI_CS); // Beenden
+      spistatus |= (1<<SPI_NEW); // neue Daten fertig
+   }
+   
    
 }
 
@@ -377,7 +431,7 @@ int main (void)
 	lcd_initialize(LCD_FUNCTION_8x2, LCD_CMD_ENTRY_INC, LCD_CMD_ON);
 	lcd_puts("Guten Tag\0");
 	delay_ms(1000);
-   delay_ms(1000);
+   //delay_ms(1000);
 	lcd_cls();
    lcd_gotoxy(0,0);
 	lcd_puts("SLAVE\0");
@@ -396,24 +450,35 @@ int main (void)
    
 	// DS1820 init-stuff begin
 	// DS1820 init-stuff end
+   
+   
+   // interrupt on INT0 pin falling edge (sensor triggered)
+   //EICRA = (1<<ISC01) | (0<<ISC00);
+   MCUCR = (1<<ISC01) | (0<<ISC00);
+	
+	// turn on interrupts!
+	//EIMSK  |= (1<<INT0);
+   GICR |= (1<<INT0);
+	
+
 #pragma mark while
    sei();
-   lcd_gotoxy(0,1);
-	while (1) 
+	while (1)
 	{
 		loopCount0 ++;
-		//_delay_ms(2);
-      
-		if (loopCount0 >=0x00FF)
+		
+		//if (loopCount0 >=0x00FF)
+      if (spistatus & (1<<SPI_NEW)) // neue Daten anzeigen
 		{
-						
-			
+			spistatus &= ~(1<<SPI_NEW); // Bit zuruecksetzen
+         
 			LOOPLED_PORT ^= (1<<LOOPLED_PIN);
 			loopCount1++;
-         
-
-         //lcd_gotoxy(12,0);
+         //lcd_gotoxy(18,0);
          //lcd_puthex(loopCount1);
+
+         lcd_gotoxy(18,1);
+         lcd_puthex(spicount);
          
          //lcd_gotoxy(12,0);
          //lcd_puthex(spicount);
@@ -422,31 +487,36 @@ int main (void)
          SPDR = 5;
          spicount++;
          PORTD = data;
-*/
+         */
+         //lcd_clr_line(0);
+         //if ((loopCount1 >0x000FF) )//&& (!(Programmstatus & (1<<MANUELL))))
+            
          
-         //lcd_gotoxy(18,0);
-         if (!(data==lastdata))
+			{
+         
+         lcd_gotoxy(6,0);
+         lcd_putc('i');
+         lcd_putc(' ');
+         lcd_puts(inbuffer);
+         //lcd_putc('+');
+         inbuffer[0] = '\0';
+         lcd_gotoxy(6,1);
+         lcd_putc('o');
+         lcd_putc(' ');
+         lcd_puts(outbuffer);
+         outbuffer[0] = '\0';
+         //if (!(data==lastdata))
          {
-            lastdata = data;
-            lcd_gotoxy(inpos,0);
-            lcd_putc(lastdata);
             inpos ++;
             if (inpos >= 19)
             {
                inpos = 0;
             }
-            
-            
-            lcd_gotoxy(outpos,1);
-            lcd_putc(text[textpos & 0x07]);
-            textpos++;
             outpos ++;
             if (outpos >= 19)
             {
                outpos = 0;
             }
-           
-            
          }
 
          
@@ -455,8 +525,6 @@ int main (void)
         // lcd_putc(text[spicount & 0x07]);
          //lcd_puthex(SPDR);
 			//SPDR = 2;
-			if ((loopCount1 >0x000F) )//&& (!(Programmstatus & (1<<MANUELL))))
-			{
             //LOOPLED_PORT ^= (1<<LOOPLED_PIN);
 				
             //LOOPLED_PORT ^= (1<<LOOPLED_PIN);

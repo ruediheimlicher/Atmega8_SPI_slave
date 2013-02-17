@@ -2,10 +2,18 @@
 #define SPI_PORT     PORTB
 #define SPI_PIN      PINB
 #define SPI_DDR      DDRB
+#define SPI_CS       1
 #define SPI_SS       2
 #define SPI_MOSI     3
 #define SPI_MISO     4
 #define SPI_SCK      5
+
+#define SPI_NEW      3 // Bit fuer neue Uebertragung
+
+
+#define INT0_DDR      DDRD
+#define INT0_PORT     PORTD
+#define INT0_PIN      2
 
 // Loop
 #define LOOPLED_PORT	PORTD
